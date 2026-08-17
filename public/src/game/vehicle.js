@@ -223,18 +223,21 @@ export class Vehicle {
 
 /* ----------------------------------------------------------------- meshes */
 
-/* Bodies come from the lofted generator in world/carbuilder.js. Weighted to
-   the real US fleet — roughly a quarter white, a fifth black, then silver and
-   grey — so the traffic doesn't read as a funeral procession. */
+/* Bodies come from the lofted generator in world/carbuilder.js. The real US
+   fleet's VALUE distribution is kept — roughly a quarter light, a fifth dark,
+   then mid greys — because that is what stops traffic reading as a parade.
+   What is dropped is its neutrality: cold blue-whites and true greys sit
+   outside the palette and read as untextured against warm facades, so lights
+   are warm creams, darks are violet-blacks, and the greys carry a hue. */
 const BODY_COLORS = [
-  0xe9eae7, 0xe9eae7, 0xeeefef, 0xdedfdc,
-  0x1d2124, 0x24272a, 0x191c1f,
-  0xb9bdc0, 0xc5c8ca, 0xadb1b4,
-  0x8d9196, 0x7c8085, 0x9aa0a4,
-  0x2a4a7a, 0x27404f, 0x35526b,
-  0x8f2b26, 0x6d2f2c,
-  0x3d5445, 0x4a5c3e,
-  0x9a8f7e, 0x7d7b6f,
+  0xdcd3c2, 0xd6ccb8, 0xe0d8c6, 0xcfc6b4,
+  0x1e1b26, 0x24202c, 0x191722,
+  0xa8a4a8, 0xb2ada8, 0x9c9aa0,
+  0x82808c, 0x74727e, 0x8d8a94,
+  0x3f5f80, 0x35526b, 0x2f4a63,
+  0x93382f, 0x7a3630,
+  0x4a5f45, 0x54683e,
+  0x9a8a72, 0x7d7466,
 ];
 
 export function buildCarMesh(spec, colorHex, opts = {}) {

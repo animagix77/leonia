@@ -3,12 +3,12 @@ import { triangulate, makeRng, clamp } from '../core/util.js';
 import { buildSurfaces } from './textures.js';
 
 const AREA_STYLE = {
-  water:      { color: 0x2c4f63, y: 0.10, rough: 0.15, metal: 0.35 },
-  park:       { color: 0x4a6b34, y: 0.06, rough: 0.95, metal: 0 },
-  pitch:      { color: 0x53773a, y: 0.09, rough: 0.9,  metal: 0 },
-  grass:      { color: 0x51683a, y: 0.05, rough: 0.95, metal: 0 },
-  retail:     { color: 0x50504e, y: 0.04, rough: 0.9,  metal: 0 },
-  industrial: { color: 0x4b4a47, y: 0.04, rough: 0.9,  metal: 0 },
+  water:      { color: 0x36536e, y: 0.10, rough: 0.55, metal: 0.0 },
+  park:       { color: 0x46603c, y: 0.06, rough: 1.0, metal: 0 },
+  pitch:      { color: 0x4e6b3d, y: 0.09, rough: 1.0,  metal: 0 },
+  grass:      { color: 0x4c6440, y: 0.05, rough: 1.0, metal: 0 },
+  retail:     { color: 0x4c4750, y: 0.04, rough: 1.0,  metal: 0 },
+  industrial: { color: 0x484350, y: 0.04, rough: 1.0,  metal: 0 },
 };
 
 /** Terrain mesh from the USGS grid, plus flat landuse decals. */
@@ -25,10 +25,10 @@ export function buildTerrain(world, scene) {
   const colors = new Float32Array(pos.count * 3);
   const rng = makeRng(1907);
 
-  const cGrass = new THREE.Color(0x4d6437);
-  const cDry = new THREE.Color(0x6a6a44);
-  const cRock = new THREE.Color(0x5d5952);
-  const cLow = new THREE.Color(0x445a38);
+  const cGrass = new THREE.Color(0x4e6640);
+  const cDry = new THREE.Color(0x7d7a4a);
+  const cRock = new THREE.Color(0x635a5e);
+  const cLow = new THREE.Color(0x415838);
   const tmp = new THREE.Color();
 
   for (let i = 0; i < pos.count; i++) {
@@ -237,14 +237,14 @@ export function buildBackdrop(world, scene) {
   sg.setAttribute('position', new THREE.Float32BufferAttribute(skirtV, 3));
   sg.setIndex(skirtI);
   sg.computeVertexNormals();
-  const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0x565248, roughness: 1 }));
+  const skirt = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ color: 0x574f55, roughness: 1 }));
   skirt.name = 'terrain_skirt';
   scene.add(skirt);
 
   // Ground ring out to the backdrop, sitting under the true terrain.
   const ring = new THREE.Mesh(
     new THREE.PlaneGeometry(R * 2.6, R * 2.6, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x4b5544, roughness: 1 })
+    new THREE.MeshStandardMaterial({ color: 0x475742, roughness: 1 })
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = LOW - 0.2;

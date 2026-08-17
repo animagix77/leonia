@@ -469,10 +469,10 @@ function mats() {
     vertexColors: true, roughness: 0.55, metalness: 0.55, envMapIntensity: 1.2,
   }));
   MAT_CACHE.set('tyre', new THREE.MeshStandardMaterial({
-    color: 0x121316, roughness: 0.95, metalness: 0.0,
+    color: 0x161320, roughness: 1.0, metalness: 0.0,
   }));
   MAT_CACHE.set('rim', new THREE.MeshStandardMaterial({
-    color: 0xa8aeb4, roughness: 0.28, metalness: 0.9, envMapIntensity: 1.6,
+    color: 0x9a9298, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.20,
   }));
   return MAT_CACHE;
 }

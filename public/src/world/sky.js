@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp, lerp } from '../core/util.js';
+import { paletteAt } from './palette.js';
 
 /* Time of day drives sun angle, light colour, fog and street lamps.
    One in-game day is 24 real minutes by default. */
@@ -44,13 +45,14 @@ export class Sky {
       side: THREE.BackSide,
       depthWrite: false,
       uniforms: {
-        top: { value: new THREE.Color(0x2f6ea8) },
-        bottom: { value: new THREE.Color(0xbcd0e0) },
+        top: { value: new THREE.Color(0x2e5f9e) },
+        bottom: { value: new THREE.Color(0xf0a05a) },
+        glow: { value: new THREE.Color(0xffc266) },
         sunDir: { value: new THREE.Vector3(0, 1, 0) },
         sunCol: { value: new THREE.Color(0xffd9a0) },
         haze: { value: 0.5 },
         uTime: { value: 0 },
-        cover: { value: 0.46 },
+        cover: { value: 0.52 },
       },
       vertexShader: `
         varying vec3 vDir;
@@ -59,7 +61,8 @@ export class Sky {
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }`,
       fragmentShader: `
-        uniform vec3 top; uniform vec3 bottom; uniform vec3 sunDir;
+        uniform vec3 top; uniform vec3 bottom; uniform vec3 glow;
+        uniform vec3 sunDir;
         uniform vec3 sunCol; uniform float haze; uniform float uTime;
         uniform float cover;
         varying vec3 vDir;
@@ -75,34 +78,42 @@ export class Sky {
         }
         float fbm(vec2 p) {
           float s = 0.0, a = 0.5;
-          for (int k = 0; k < 5; k++) { s += vnoise(p) * a; p *= 2.03; a *= 0.5; }
+          for (int k = 0; k < 4; k++) { s += vnoise(p) * a; p *= 2.03; a *= 0.5; }
           return s;
         }
 
         void main() {
           vec3 dir = normalize(vDir);
           float h = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
-          vec3 col = mix(bottom, top, pow(h, 0.75));
           float d = max(dot(dir, normalize(sunDir)), 0.0);
 
-          /* Clouds: project the view ray onto a flat deck and run fbm across
-             it. Cheap, and it gives the horizon and the fog colour something
-             to actually come from instead of a bare two-stop gradient. */
+          /* A three-stop gradient, not two: zenith, horizon, and a warm glow
+             band that sits just above the skyline and wraps toward the sun.
+             The glow is what makes the sky read as a printed poster rather
+             than a lerp — it gives the horizon a colour of its own. */
+          vec3 col = mix(bottom, top, pow(h, 0.62));
+          float band = pow(1.0 - clamp(abs(dir.y) * 2.6, 0.0, 1.0), 2.0);
+          float toward = pow(clamp(d * 0.5 + 0.5, 0.0, 1.0), 2.2);
+          col = mix(col, glow, band * (0.35 + 0.65 * toward) * 0.85);
+
+          /* Cloud deck, deliberately flattened. The threshold is hard and the
+             shading is two-tone, so clouds become flat shapes with defined
+             edges — cut paper rather than photographed vapour. They are also
+             stretched along x, which reads as stratified high cloud. */
           if (dir.y > 0.015) {
             vec2 p = dir.xz / dir.y * 0.55 + vec2(uTime * 0.0035, uTime * 0.0018);
-            float n = fbm(p * 1.7);
-            float m = smoothstep(cover, cover + 0.30, n);
-            // fade the deck out toward the horizon so it doesn't form a wall
-            m *= smoothstep(0.015, 0.30, dir.y);
-            // shade: lit tops toward the sun, denser cores stay grey
-            float lit = 0.55 + 0.45 * d;
-            vec3 cloud = mix(vec3(0.62, 0.65, 0.70), vec3(1.02, 0.99, 0.95), lit);
-            cloud *= mix(0.75, 1.0, smoothstep(0.0, 0.55, n));
-            col = mix(col, cloud * (0.45 + 0.55 * max(sunCol.r, 0.25)), m * 0.85);
+            float n = fbm(p * vec2(0.9, 2.4));
+            float m = smoothstep(cover, cover + 0.11, n);
+            m *= smoothstep(0.015, 0.26, dir.y);
+            // Two flat tones: sunward faces take the glow, the rest go cool.
+            vec3 cloudLit  = mix(glow, sunCol, 0.35) * 1.06;
+            vec3 cloudCore = mix(top, bottom, 0.35) * 0.86;
+            vec3 cloud = mix(cloudCore, cloudLit, smoothstep(0.30, 0.72, n * (0.55 + 0.75 * toward)));
+            col = mix(col, cloud, m * 0.80);
           }
 
-          col += sunCol * pow(d, 220.0) * 2.5;              // disc
-          col += sunCol * pow(d, 6.0) * 0.35 * haze;        // glow
+          col += sunCol * pow(d, 300.0) * 2.2;              // disc, tighter
+          col += glow * pow(d, 4.0) * 0.30 * haze;          // wide warm bloom
           gl_FragColor = vec4(col, 1.0);
         }`,
     });
@@ -113,7 +124,10 @@ export class Sky {
     /* Exponential-squared, not linear. Linear fog with far = 2300 bleached the
        whole town silhouette to near-white by 800 m; exp2 keeps near geometry
        clean and only builds density in the true distance. */
-    scene.fog = new THREE.FogExp2(0x9fb2c4, 0.00042);
+    /* Kept only as a gentle blend for geometry the depth pass cannot reach
+       cleanly (transparents, the far skirt). The real aerial perspective — the
+       two-colour distance banding — lives in the atmosphere pass in main.js. */
+    scene.fog = new THREE.FogExp2(0xd98f63, 0.00016);
 
     // ---- image-based lighting
     // A second, tiny scene holding only a copy of the sky shader, convolved
@@ -190,41 +204,45 @@ export class Sky {
     const golden = clamp(1 - Math.abs(elev - 0.11) / 0.16, 0, 1);
     const dusk = clamp(1 - Math.abs(elev) * 3.2, 0, 1);
 
-    this.sun.intensity = lerp(0.0, 2.9, day);
-    // Warm and redden as it drops, rather than simply dimming.
-    this.sun.color.setRGB(
-      1.0,
-      lerp(0.58, 0.95, day) - golden * 0.16,
-      lerp(0.34, 0.88, day) - golden * 0.34
-    );
+    /* Everything below is sampled from one palette keyframed across the day,
+       rather than each value being lerped on its own curve. That is what keeps
+       sun, sky, shade and haze in a single harmony at every hour instead of
+       drifting into unrelated colours at the in-between times. */
+    const pal = paletteAt(this.time);
 
-    /* Skylight is roughly a fifth of direct sun in reality and it is BRIGHT.
-       At 0.70 max, every surface not facing the sun crushed to mud and the
-       frame read as underexposed against a correct-looking sky. */
-    this.hemi.intensity = lerp(0.34, 1.55, day);
-    this.hemi.color.setHex(day > 0.2 ? 0x8fb0d4 : 0x2c3a4c);
-    this.hemi.groundColor.setHex(day > 0.2 ? 0x55554a : 0x1b1d1c);
+    this.sun.intensity = pal.sunI;
+    this.sun.color.copy(pal.sun);
 
-    const topDay = new THREE.Color(0x2f6ea8), topNight = new THREE.Color(0x080d18);
-    const botDay = new THREE.Color(0xc2d4e2), botNight = new THREE.Color(0x141c28);
-    const botDusk = new THREE.Color(0xd8875a);
-    this.skyMat.uniforms.top.value.copy(topNight).lerp(topDay, day);
-    this.skyMat.uniforms.bottom.value.copy(botNight).lerp(botDay, day).lerp(botDusk, dusk * 0.65);
+    this.hemi.intensity = pal.hemiI;
+    this.hemi.color.copy(pal.hemiSky);
+    this.hemi.groundColor.copy(pal.hemiGnd);
+
+    this.skyMat.uniforms.top.value.copy(pal.skyTop);
+    this.skyMat.uniforms.bottom.value.copy(pal.skyHorizon);
+    this.skyMat.uniforms.glow.value.copy(pal.skyGlow);
     this.skyMat.uniforms.sunDir.value.copy(dir);
-    this.skyMat.uniforms.sunCol.value.setRGB(1, lerp(0.55, 0.92, day), lerp(0.3, 0.8, day));
-    this.skyMat.uniforms.haze.value = 0.35 + dusk * 0.9;
+    this.skyMat.uniforms.sunCol.value.copy(pal.sun);
+    this.skyMat.uniforms.haze.value = 0.45 + dusk * 0.85;
 
     if (focus) this.dome.position.set(focus.x, 0, focus.z);
     this.dayFactor = day;
+    this.palette = pal;
 
-    const fogCol = new THREE.Color(0x0e141d).lerp(new THREE.Color(0xa8bccd), day).lerp(botDusk, dusk * 0.5);
-    this.scene.fog.color.copy(fogCol);
-    // Thicker at night and at dawn/dusk, thinnest at midday.
-    this.scene.fog.density = lerp(0.00085, 0.00030, day) + dusk * 0.00022;
-    this.renderer.setClearColor(fogCol);
+    /* The atmosphere pass owns the two-colour distance banding. Feeding it
+       here keeps the bands locked to the same palette as the sky they are
+       standing in front of — if these drift apart the far silhouettes stop
+       reading as the same air. */
+    if (this.atmos) {
+      this.atmos.uniforms.uFogNear.value.copy(pal.fogNear);
+      this.atmos.uniforms.uFogFar.value.copy(pal.fogFar);
+    }
+
+    // Scene fog is only the near blend; it tracks the warm band.
+    this.scene.fog.color.copy(pal.fogNear);
+    this.scene.fog.density = lerp(0.00030, 0.00013, day) + dusk * 0.00010;
+    this.renderer.setClearColor(pal.fogFar);
     this.skyMat.uniforms.uTime.value += dt;
-    // Broken cloud by day, more overcast-looking at night.
-    this.skyMat.uniforms.cover.value = lerp(0.56, 0.44, day);
+    this.skyMat.uniforms.cover.value = lerp(0.58, 0.50, day);
 
     this.envAge += dt;
     if (this.envRT) this.refreshEnvironment(false);

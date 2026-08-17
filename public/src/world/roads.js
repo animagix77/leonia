@@ -322,23 +322,23 @@ export function buildRoads(world, scene) {
   const out = {};
   // Colours are the real surface hue; the maps only add variation on top.
   out.walk = mk(walk, {
-    color: 0x8e8c85, roughness: 0.94, metalness: 0.0,
+    color: 0x7d7480, roughness: 1.0, metalness: 0.0,
     ...tiled(S.concrete, 1.5), normalScale: new THREE.Vector2(0.8, 0.8),
   }, 2, 'sidewalks');
   out.curb = mk(curb, {
-    color: 0x97958d, roughness: 0.90,
+    color: 0x847a86, roughness: 1.0,
     ...tiled(S.concrete, 1.5), normalScale: new THREE.Vector2(0.5, 0.5),
   }, 2, 'curbs');
   out.asphalt = mk(asphalt, {
-    color: 0x35373b, roughness: 0.84, metalness: 0.02, envMapIntensity: 0.45,
+    color: 0x2f2b3a, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.12,
     ...tiled(S.asphalt, 4.0), normalScale: new THREE.Vector2(1.1, 1.1),
   }, 3, 'asphalt');
   out.highway = mk(asphaltHwy, {
-    color: 0x3b3d41, roughness: 0.80, metalness: 0.02, envMapIntensity: 0.45,
+    color: 0x363042, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.12,
     ...tiled(S.asphalt, 4.5), normalScale: new THREE.Vector2(1.0, 1.0),
   }, 3, 'asphalt_hwy');
-  out.yellow = mk(yellow, { color: 0xd8b84e, roughness: 0.62, polygonOffsetFactor: -9, polygonOffsetUnits: -9 }, 4, 'lines_yellow');
-  out.white = mk(white, { color: 0xdcdcd6, roughness: 0.62, polygonOffsetFactor: -9, polygonOffsetUnits: -9 }, 4, 'lines_white');
+  out.yellow = mk(yellow, { color: 0xd9a848, roughness: 1.0, polygonOffsetFactor: -9, polygonOffsetUnits: -9 }, 4, 'lines_yellow');
+  out.white = mk(white, { color: 0xd8ccb8, roughness: 1.0, polygonOffsetFactor: -9, polygonOffsetUnits: -9 }, 4, 'lines_white');
 
   if (world.rails.length) {
     const rail = new Ribbon();
@@ -352,7 +352,7 @@ export function buildRoads(world, scene) {
       rail.add(world, pts, nrm, 0.07, 0.36, 0.72);
     }
     out.ties = mk(tie, { color: 0x453a30, roughness: 1.0 }, 2, 'rail_bed');
-    out.rails = mk(rail, { color: 0x7a7062, roughness: 0.35, metalness: 0.85 }, 5, 'rails');
+    out.rails = mk(rail, { color: 0x6e6660, roughness: 0.55, metalness: 0.0 }, 5, 'rails');
   }
 
   return out;

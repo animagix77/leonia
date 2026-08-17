@@ -4,6 +4,7 @@ import { buildTerrain, buildBoundary, buildBackdrop } from './world/terrain.js';
 import { buildRoads } from './world/roads.js';
 import { buildBuildings, buildProps } from './world/buildings.js';
 import { Sky } from './world/sky.js';
+import { flattenScene } from './world/palette.js';
 import { buildParkedCars } from './world/parking.js';
 import { buildUtilities } from './world/utilities.js';
 import { JobBoard } from './game/jobs.js';
@@ -14,27 +15,86 @@ import { dentVehicle, SmokePool } from './game/effects.js';
 import { Mission, SHIFT_END, OUTCOME } from './game/mission.js';
 import { Audio } from './game/audio.js';
 import { CAR_SPECS } from './game/vehicle.js';
-import { GTAOPass } from '../vendor/jsm/postprocessing/GTAOPass.js';
 import { ShaderPass } from '../vendor/jsm/postprocessing/ShaderPass.js';
 
 /* Final grade. Runs after tonemapping on an LDR sRGB image: a soft vignette,
    a touch of film grain to break up flat gradients, and a gentle contrast/
    saturation lift so the frame doesn't sit flat and grey. */
+/* ---------------------------------------------------------------------------
+   The two passes that carry the art direction, split by the space they belong
+   in. Aerial perspective is a physical mixing of light and has to happen in
+   linear HDR, BEFORE tone mapping. The grade — split-tone, vignette, grain —
+   is a print treatment and belongs after it. Running both in one pass after
+   OutputPass was wrong on the first count and also could not see scene depth.
+--------------------------------------------------------------------------- */
+
+/* Aerial perspective. This is the signature of the look: distance does not
+   fade to grey, it ramps through a warm mid band into a cool far band, so a
+   street reads as a stack of flat silhouettes separated by HUE rather than
+   just by value. The far plane is skipped so the sky keeps its own gradient. */
+const AtmosphereShader = {
+  uniforms: {
+    tDiffuse:  { value: null },
+    tDepth:    { value: null },
+    uNear:     { value: 0.1 },
+    uFar:      { value: 3000 },
+    uFogNear:  { value: new THREE.Color(0xd98f63) },
+    uFogFar:   { value: new THREE.Color(0xa9738f) },
+    uStart:    { value: 30.0 },      // metres before haze begins
+    uMid:      { value: 260.0 },     // where the warm band peaks
+    uEnd:      { value: 1000.0 },    // fully into the cool far band
+    uPower:    { value: 1.00 },      // higher keeps near geometry clear of haze
+    uMax:      { value: 0.78 },      // never fully solid, so silhouettes survive
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    #include <packing>
+    uniform sampler2D tDiffuse, tDepth;
+    uniform float uNear, uFar, uStart, uMid, uEnd, uPower, uMax;
+    uniform vec3 uFogNear, uFogFar;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      float d = texture2D(tDepth, vUv).x;
+      if (d >= 0.9999) { gl_FragColor = src; return; }   // far plane is sky
+
+      float dist = -perspectiveDepthToViewZ(d, uNear, uFar);
+
+      float warm = smoothstep(uStart, uMid, dist);
+      float cool = smoothstep(uMid * 0.85, uEnd, dist);
+      vec3 band  = mix(uFogNear, uFogFar, cool);
+      float amt  = pow(clamp(warm, 0.0, 1.0), uPower) * uMax;
+
+      gl_FragColor = vec4(mix(src.rgb, band, amt), src.a);
+    }`,
+};
+
+/* The print treatment, after tone mapping. Split-toning is what stops the
+   frame reading as "realistic render with orange light": warmth is pushed into
+   the highlights and blue-violet into the shade, so every surface carries two
+   temperatures at once the way a screen-printed poster does. */
 const GradeShader = {
   uniforms: {
-    tDiffuse: { value: null },
-    uTime: { value: 0 },
-    uVignette: { value: 0.34 },
-    uGrain: { value: 0.028 },
-    uContrast: { value: 1.055 },
-    uSaturation: { value: 1.08 },
+    tDiffuse:    { value: null },
+    uTime:       { value: 0 },
+    uVignette:   { value: 0.50 },
+    uGrain:      { value: 0.022 },
+    uContrast:   { value: 1.05 },
+    uSaturation: { value: 1.24 },
+    uWarmLift:   { value: new THREE.Color(0xffb870) },
+    uCoolShade:  { value: new THREE.Color(0x5566a0) },
+    uSplit:      { value: 0.34 },
   },
   vertexShader: `
     varying vec2 vUv;
     void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
     uniform sampler2D tDiffuse;
-    uniform float uTime, uVignette, uGrain, uContrast, uSaturation;
+    uniform float uTime, uVignette, uGrain, uContrast, uSaturation, uSplit;
+    uniform vec3 uWarmLift, uCoolShade;
     varying vec2 vUv;
 
     float hash(vec2 p) {
@@ -44,17 +104,20 @@ const GradeShader = {
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
 
-      // contrast around mid grey, then saturation
-      c = (c - 0.5) * uContrast + 0.5;
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      vec3 tone = mix(uCoolShade, uWarmLift, smoothstep(0.15, 0.85, l));
+      c = mix(c, c * tone * 2.0, uSplit);
+
+      c = (c - 0.5) * uContrast + 0.5;
+      l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, uSaturation);
 
-      // vignette
+      /* Heavier than a realistic vignette, with a quartic term so the corners
+         fall off hard — this is doing poster-edge duty, not lens simulation. */
       vec2 d = vUv - 0.5;
-      float vig = 1.0 - uVignette * dot(d, d) * 2.6;
-      c *= vig;
+      float r = dot(d, d);
+      c *= 1.0 - uVignette * r * 2.2 - uVignette * r * r * 1.8;
 
-      // animated grain, scaled down in the highlights so skies stay clean
       float g = hash(vUv * 1024.0 + fract(uTime) * 97.0) - 0.5;
       c += g * uGrain * (1.0 - l * 0.7);
 
@@ -196,33 +259,67 @@ async function boot() {
   composer.setSize(innerWidth, innerHeight);
   composer.addPass(new RenderPass(scene, camera));
 
-  const gtao = new GTAOPass(scene, camera, innerWidth, innerHeight);
-  gtao.output = GTAOPass.OUTPUT.Default;
-  gtao.blendIntensity = 0.85;
-  gtao.updateGtaoMaterial({
-    radius: 1.6,          // metres — kerb and eave scale, not room scale
-    distanceExponent: 1.0,
-    thickness: 1.0,
-    scale: 1.0,
-    samples: 12,
-    screenSpaceRadius: false,
-  });
-  composer.addPass(gtao);
-  state.gtao = gtao;
+  /* Swap targets rebuilt so each carries its OWN depth texture, attached at
+     construction. Two earlier attempts failed for reasons worth recording:
+     sharing one depth texture between both targets means the scene's depth is
+     never the depth a later pass samples, and assigning .depthTexture to a
+     target three has already created leaves the framebuffer on its original
+     depth RENDERBUFFER — the texture binds fine and reads back a flat
+     constant, which hazes the whole frame uniformly and looks like a shader
+     bug rather than an attachment one. */
+  const makeTarget = () => {
+    const dt = new THREE.DepthTexture(1, 1);
+    dt.type = THREE.UnsignedIntType;
+    return new THREE.WebGLRenderTarget(1, 1, {
+      type: THREE.HalfFloatType,
+      depthBuffer: true,
+      depthTexture: dt,
+    });
+  };
+  composer.renderTarget1.dispose();
+  composer.renderTarget2.dispose();
+  composer.renderTarget1 = makeTarget();
+  composer.renderTarget2 = makeTarget();
+  composer.writeBuffer = composer.renderTarget1;
+  composer.readBuffer = composer.renderTarget2;
+  composer.setSize(innerWidth, innerHeight);
+
+  /* Aerial perspective, in linear space directly after the scene render.
+     RenderPass draws into readBuffer without swapping, so at this point in the
+     chain readBuffer still carries the scene's own depth — the pass binds it
+     per frame rather than assuming which target it landed in. */
+  const atmos = new ShaderPass(AtmosphereShader);
+  atmos.uniforms.uNear.value = camera.near;
+  atmos.uniforms.uFar.value = camera.far;
+  const atmosRender = atmos.render.bind(atmos);
+  atmos.render = (renderer_, writeBuffer, readBuffer, ...rest) => {
+    atmos.uniforms.tDepth.value = readBuffer.depthTexture;
+    atmosRender(renderer_, writeBuffer, readBuffer, ...rest);
+  };
+  composer.addPass(atmos);
+  state.atmos = atmos;
+
+  /* No ambient-occlusion pass. Ground-contact darkening is a photorealism cue
+     and it fights the flat poster surfaces this look is built on — shape here
+     is meant to read from silhouette and from the light/shade split, not from
+     creases. Dropping it also buys back the frame budget the atmosphere pass
+     and the larger shadow map spend. */
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(innerWidth, innerHeight),
-    0.35,   // strength — pushed up at night
-    0.72,   // radius
-    0.86    // threshold: only genuinely bright things glow
+    0.42,   // strength — a soft haze bloom, carrying the low sun
+    0.90,   // radius — wide and gentle rather than a tight glare
+    0.72    // threshold — lower, so lit facades and sky bloom, not just lamps
   );
   composer.addPass(bloom);
   composer.addPass(new OutputPass());
 
-  // Vignette, film grain and a gentle S-curve, applied after tonemapping.
+  // Aerial perspective, split-tone, vignette and grain — see GradeShader.
   const grade = new ShaderPass(GradeShader);
   composer.addPass(grade);
   state.grade = grade;
+  // Sky owns the palette, so it drives the atmosphere bands directly.
+  state.sky.atmos = atmos;
 
   composer.addPass(new SMAAPass(innerWidth, innerHeight));
   state.composer = composer;
@@ -265,6 +362,11 @@ async function boot() {
   // Warm the traffic sim so the streets aren't empty on the first frame.
   for (let i = 0; i < 90; i++) state.traffic.update(1 / 30, state.player);
   mark('traffic warmup');
+
+  /* Last, so it catches every material every module made — including the
+     vehicle shells, which are built during traffic warmup above. */
+  const flattened = flattenScene(scene);
+  mark(`flattened ${flattened} materials`);
 
   setProgress(1, 'ready');
   els.startbtn.disabled = false;
@@ -316,7 +418,7 @@ function onResize() {
   state.camera.updateProjectionMatrix();
   state.renderer.setSize(innerWidth, innerHeight);
   if (state.composer) state.composer.setSize(innerWidth, innerHeight);
-  if (state.gtao) state.gtao.setSize(innerWidth, innerHeight);
+
   state.mini.resize();
 }
 

@@ -25,15 +25,18 @@ const SILL = new THREE.Color(0xb0aca2);
    for ~93% of Leonia's footprints. A brick colonial and a painted frame cape
    are different buildings and shouldn't share a palette — this is most of
    what makes a street read as individual houses rather than recoloured copies. */
+/* One harmony, not per-material realism. Values are held to a mid band —
+   nothing reaches near-white — so facades stay as flat shapes carrying the
+   sky's colour rather than blowing out and reading as untextured boxes. */
 const MATERIAL_PALETTE = {
-  brick:    [0x8d5a46, 0x9a6450, 0x7d4f3e, 0xa2705a, 0x86553f, 0x6f4436],
-  stone:    [0x9a958c, 0x8b867e, 0xa9a49a, 0x7f7a73],
-  block:    [0xa8a49c, 0x9a968e, 0x8e8a83],
-  stucco:   [0xd8cfbc, 0xe0d8c6, 0xcabfa9, 0xd2c8b4, 0xbfb49f],
-  aluminum: [0xc7ccc9, 0xb4bcbb, 0xd3d6d1, 0xa9b2b0, 0xdcdedb],
+  brick:    [0x8a4a3a, 0x96543f, 0x7a4034, 0xa35f42, 0x6f3b32, 0x8b503c],
+  stone:    [0x8a7f7c, 0x7d7370, 0x968a84, 0x6f6663],
+  block:    [0x93887f, 0x877d76, 0x7c736d],
+  stucco:   [0xc9a882, 0xd2b28c, 0xb99a78, 0xc2a179, 0xab8e70],
+  aluminum: [0xa8a8a2, 0x9a9c9a, 0xb4b2aa, 0x8e918f, 0xbdbab1],
   // Painted clapboard gets the widest range, because it's paint.
-  frame:    [0xe2ded4, 0xd6d9d3, 0xb9c3c4, 0xa8b5a6, 0xd8cba9,
-             0xc4ccd2, 0x9fae9c, 0xe0d4bd, 0xbcb6ad, 0xcfd6d8],
+  frame:    [0xd6c3a4, 0xc4b79e, 0x9fb0ae, 0x93a58f, 0xcbaa79,
+             0xa8b2bd, 0x8a9c88, 0xd0b58e, 0xa89a8e, 0xb6bcbd],
 };
 
 /* Roof pitch tracks the era it was built in: pre-war housing here is steep,
@@ -883,8 +886,8 @@ export function buildProps(world, scene) {
   }
 
   if (treePts.length) {
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2c, roughness: 1 });
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0x3f5c2c, roughness: 0.94, flatShading: true });
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x40302a, roughness: 1, metalness: 0 });
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0x35502f, roughness: 1, metalness: 0, flatShading: true });
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.15, 0.26, 3.2, 6), trunkMat, treePts.length);
     const crownA = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.9, 1), crownMat, treePts.length);
     const crownB = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1.35, 0), crownMat, treePts.length);
@@ -899,7 +902,9 @@ export function buildProps(world, scene) {
       m.compose(new THREE.Vector3(x, y + 1.6 * sc, z), rot, new THREE.Vector3(sc, sc, sc));
       trunks.setMatrixAt(i, m);
 
-      col.setHSL(0.235 + rng() * 0.07, 0.32 + rng() * 0.2, 0.17 + rng() * 0.12);
+      // Narrow hue spread and a low value ceiling: canopies read as one
+      // massed shape, which is what makes them silhouette against the sky.
+      col.setHSL(0.255 + rng() * 0.045, 0.30 + rng() * 0.14, 0.14 + rng() * 0.075);
       const s1 = sc * (0.9 + rng() * 0.35);
       m.compose(new THREE.Vector3(x, y + 3.9 * sc, z), rot, new THREE.Vector3(s1, s1 * 1.1, s1));
       crownA.setMatrixAt(i, m);
