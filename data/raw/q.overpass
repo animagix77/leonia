@@ -1,0 +1,15 @@
+[out:json][timeout:180];
+(
+  way["highway"](40.8480,-74.0100,40.8800,-73.9720);
+  way["building"](40.8480,-74.0100,40.8800,-73.9720);
+  way["natural"="water"](40.8480,-74.0100,40.8800,-73.9720);
+  way["waterway"](40.8480,-74.0100,40.8800,-73.9720);
+  way["leisure"~"park|pitch|playground|garden"](40.8480,-74.0100,40.8800,-73.9720);
+  way["landuse"](40.8480,-74.0100,40.8800,-73.9720);
+  way["railway"](40.8480,-74.0100,40.8800,-73.9720);
+  node["highway"~"traffic_signals|stop|crossing"](40.8480,-74.0100,40.8800,-73.9720);
+  node["amenity"](40.8480,-74.0100,40.8800,-73.9720);
+  relation["boundary"="administrative"]["name"="Leonia"](40.8480,-74.0100,40.8800,-73.9720);
+);
+(._;>;);
+out body;

@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LEONIA — Civic Duty</title>
+<style>
+  :root {
+    --bg: #0d1114;
+    --panel: rgba(14, 19, 23, 0.86);
+    --edge: rgba(150, 178, 196, 0.22);
+    --text: #dde7ee;
+    --dim: #8ea0ad;
+    --good: #5fd18a;
+    --warn: #e8c15a;
+    --bad: #e0554a;
+    --hot: #e8873a;
+    --cyan: #4fd0ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  canvas#gl { display: block; width: 100vw; height: 100vh; }
+
+  .hidden { display: none !important; }
+
+  /* ---------------------------------------------------------- loading */
+  #loading {
+    position: fixed; inset: 0; z-index: 100;
+    background: linear-gradient(160deg, #0b0f13 0%, #131b21 55%, #0d1418 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; text-align: center; padding: 24px;
+  }
+  #loading h1 {
+    margin: 0; font-size: clamp(28px, 5vw, 54px); letter-spacing: 0.22em;
+    font-weight: 600; color: #eaf2f8;
+  }
+  #loading h2 {
+    margin: 0; font-size: clamp(11px, 1.5vw, 15px); letter-spacing: 0.42em;
+    font-weight: 400; color: var(--cyan); text-transform: uppercase;
+  }
+  #loading .sub { color: var(--dim); font-size: 13px; max-width: 620px; line-height: 1.65; }
+  #bar { width: min(460px, 80vw); height: 3px; background: rgba(255,255,255,0.09); border-radius: 2px; overflow: hidden; }
+  #bar > i { display: block; height: 100%; width: 0%; background: var(--cyan); transition: width 0.25s ease; }
+  #loadmsg { color: var(--dim); font-size: 12px; letter-spacing: 0.1em; min-height: 16px; }
+  #startbtn {
+    margin-top: 8px; padding: 13px 34px; font: inherit; font-size: 14px; letter-spacing: 0.18em;
+    background: transparent; color: var(--cyan); border: 1px solid var(--cyan);
+    border-radius: 2px; cursor: pointer; transition: 0.16s;
+  }
+  #startbtn:hover { background: var(--cyan); color: #06121a; }
+  #startbtn:disabled { opacity: 0.3; cursor: default; }
+  .attrib { position: fixed; bottom: 12px; font-size: 10px; color: #55646f; letter-spacing: 0.06em; }
+
+  /* -------------------------------------------------------------- HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 3px; backdrop-filter: blur(7px);
+  }
+
+  /* top-left: standing */
+  #standing { position: absolute; top: 14px; left: 14px; padding: 10px 14px; min-width: 232px; }
+  #standing .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  #standing .label { font-size: 9px; letter-spacing: 0.2em; color: var(--dim); }
+  #standing .val { font-size: 13px; font-weight: 600; letter-spacing: 0.1em; }
+  .meter { height: 3px; background: rgba(255,255,255,0.08); margin: 5px 0 9px; border-radius: 2px; overflow: hidden; }
+  .meter > i { display: block; height: 100%; width: 0%; transition: width 0.3s ease; }
+  #mTrust > i { background: var(--good); }
+  #mOver > i { background: var(--hot); }
+  #mHeat > i { background: var(--bad); }
+
+  /* top-right: clock, funds, radio */
+  #topright { position: absolute; top: 14px; right: 14px; text-align: right; padding: 10px 14px; min-width: 210px; }
+  #clock { font-size: 17px; letter-spacing: 0.08em; }
+  #funds { font-size: 13px; color: var(--good); margin-top: 2px; }
+  #radio { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--edge); }
+  #radioName { font-size: 10px; letter-spacing: 0.12em; color: var(--cyan); }
+  #radioLine { font-size: 10px; color: var(--dim); margin-top: 3px; line-height: 1.5; max-width: 230px; }
+
+  /* bottom-left: minimap */
+  #mapwrap { position: absolute; left: 16px; bottom: 16px; width: 186px; height: 186px; }
+  #minimap { width: 100%; height: 100%; border-radius: 50%; display: block; }
+  #street {
+    position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 2px;
+    padding: 3px 11px; font-size: 10px; letter-spacing: 0.09em; white-space: nowrap;
+  }
+
+  /* bottom-right: speedo */
+  #speedo { position: absolute; right: 16px; bottom: 16px; padding: 12px 18px; text-align: right; min-width: 168px; }
+  #mph { font-size: 40px; line-height: 0.95; font-weight: 600; letter-spacing: -0.02em; }
+  #mph.over { color: var(--hot); }
+  #mph.way-over { color: var(--bad); }
+  #mphUnit { font-size: 10px; color: var(--dim); letter-spacing: 0.2em; }
+  #limitBox {
+    display: inline-block; margin-top: 8px; padding: 3px 9px 4px;
+    border: 2px solid #d8dee3; border-radius: 2px; background: #f2f5f7; color: #10161a;
+  }
+  #limitBox .t { font-size: 7px; letter-spacing: 0.1em; display: block; }
+  #limitBox .n { font-size: 17px; font-weight: 700; line-height: 1; }
+  #gearRow { font-size: 10px; color: var(--dim); margin-top: 7px; letter-spacing: 0.14em; }
+
+  /* centre: reticle + radar */
+  #reticle {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 26px; height: 26px; opacity: 0;
+    transition: opacity 0.12s;
+  }
+  #reticle.on { opacity: 1; }
+  #reticle:before, #reticle:after {
+    content: ''; position: absolute; background: var(--cyan);
+  }
+  #reticle:before { left: 50%; top: 0; width: 1px; height: 100%; margin-left: -0.5px; }
+  #reticle:after { top: 50%; left: 0; height: 1px; width: 100%; margin-top: -0.5px; }
+  #radarBox {
+    position: absolute; left: 50%; top: calc(50% + 34px); transform: translateX(-50%);
+    padding: 9px 16px; text-align: center; min-width: 190px; opacity: 0; transition: opacity 0.15s;
+  }
+  #radarBox.on { opacity: 1; }
+  #radarSpeed { font-size: 28px; font-weight: 700; letter-spacing: 0.02em; }
+  #radarMeta { font-size: 10px; color: var(--dim); letter-spacing: 0.1em; margin-top: 3px; }
+  #radarFlags { font-size: 10px; margin-top: 6px; line-height: 1.6; }
+
+  /* target card */
+  #targetCard {
+    position: absolute; left: 50%; top: 78px; transform: translateX(-50%);
+    padding: 10px 16px; min-width: 300px; max-width: 440px; text-align: center;
+  }
+  #targetCard .plate {
+    display: inline-block; background: #e8ebe4; color: #14181a; padding: 2px 10px;
+    border-radius: 2px; font-weight: 700; letter-spacing: 0.16em; font-size: 13px;
+  }
+  #targetCard .nm { font-size: 11px; color: var(--dim); margin-top: 5px; letter-spacing: 0.08em; }
+  #targetCard .vio { font-size: 11px; margin-top: 7px; line-height: 1.7; text-align: left; }
+
+  /* prompt */
+  #prompt {
+    position: absolute; left: 50%; bottom: 130px; transform: translateX(-50%);
+    padding: 8px 18px; font-size: 12px; letter-spacing: 0.1em;
+  }
+  #prompt kbd {
+    background: rgba(255,255,255,0.13); border: 1px solid var(--edge); border-radius: 2px;
+    padding: 1px 6px; font: inherit; font-size: 11px; margin: 0 2px;
+  }
+
+  /* evidence events — the "I saw that" channel, top centre, its own lane */
+  #events {
+    position: absolute; left: 50%; top: 152px; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+    width: max-content; max-width: 460px;
+  }
+  .evcard {
+    padding: 7px 15px; min-width: 268px; text-align: left;
+    border-left: 3px solid var(--cyan);
+    animation: evin 0.22s ease-out;
+  }
+  @keyframes evin { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: none; } }
+  .evcard.scan { border-left-color: var(--good); }
+  .evcard.clean { border-left-color: var(--dim); }
+  .evcard .h { font-size: 12px; letter-spacing: 0.06em; }
+  .evcard .d { font-size: 10px; color: var(--dim); margin-top: 3px; letter-spacing: 0.06em; }
+
+  /* stat deltas — why a meter just moved */
+  #deltas {
+    position: absolute; left: 14px; top: 176px; width: 268px;
+    display: flex; flex-direction: column; gap: 3px; pointer-events: none;
+  }
+  .delta {
+    font-size: 10.5px; letter-spacing: 0.04em; padding: 3px 8px;
+    background: rgba(14,19,23,0.86); border-left: 2px solid var(--dim);
+    animation: evin 0.18s ease-out; line-height: 1.4;
+  }
+  .delta b { font-weight: 600; }
+  .delta.up { border-left-color: var(--good); } .delta.up b { color: var(--good); }
+  .delta.down { border-left-color: var(--bad); } .delta.down b { color: var(--bad); }
+  .delta .r { color: var(--dim); }
+
+  /* objective tracker */
+  #objectives {
+    position: absolute; right: 16px; top: 168px; width: 236px; padding: 11px 13px;
+  }
+  #objectives .t {
+    font-size: 9px; letter-spacing: 0.2em; color: var(--dim);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  #objectives .t b { color: var(--cyan); font-weight: 600; letter-spacing: 0.1em; font-size: 11px; }
+  #objectives .o {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11px; margin-top: 7px; gap: 8px;
+  }
+  #objectives .o .n { color: var(--text); }
+  #objectives .o .v { color: var(--dim); font-variant-numeric: tabular-nums; }
+  #objectives .o.done .n { color: var(--good); }
+  #objectives .o.done .v { color: var(--good); }
+  #objectives .o.done .n:before { content: '✓ '; }
+  #objBar { height: 2px; background: rgba(255,255,255,0.09); margin-top: 4px; border-radius: 2px; overflow: hidden; }
+  #objBar > i { display: block; height: 100%; width: 0%; background: var(--cyan); transition: width 0.3s ease; }
+
+  /* health */
+  #healthRow { display: flex; justify-content: space-between; align-items: baseline; margin-top: 10px; }
+  #healthRow .label { font-size: 9px; letter-spacing: 0.2em; color: var(--dim); }
+  #mHealth > i { background: var(--good); }
+  #mHealth.low > i { background: var(--warn); }
+  #mHealth.crit > i { background: var(--bad); }
+
+  /* hurt vignette */
+  #hurt {
+    position: fixed; inset: 0; z-index: 12; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(150,20,14,0.75) 100%);
+    transition: opacity 0.35s ease;
+  }
+
+  /* end-of-shift screen */
+  #endscreen {
+    position: fixed; inset: 0; z-index: 40; display: flex;
+    align-items: center; justify-content: center; pointer-events: auto;
+    background: radial-gradient(ellipse at center, rgba(10,15,19,0.90) 0%, rgba(6,9,12,0.97) 70%);
+    backdrop-filter: blur(6px);
+    animation: fadein 0.7s ease both;
+  }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  #endscreen .card { width: min(620px, 92vw); text-align: center; padding: 40px 40px 32px; }
+  #endTitle {
+    font-size: clamp(26px, 4.4vw, 44px); letter-spacing: 0.2em; font-weight: 600; margin: 0;
+  }
+  #endTitle.good { color: var(--good); }
+  #endTitle.bad { color: var(--bad); }
+  #endLine {
+    color: var(--dim); font-size: 12.5px; line-height: 1.8; margin: 16px auto 26px;
+    max-width: 460px;
+  }
+  #endScore { font-size: 52px; font-weight: 600; letter-spacing: -0.01em; line-height: 1; }
+  #endScoreLabel { font-size: 9px; letter-spacing: 0.28em; color: var(--dim); margin-top: 6px; }
+  #endStats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    margin: 28px 0 6px; padding-top: 20px; border-top: 1px solid var(--edge);
+  }
+  #endStats div .v { font-size: 19px; }
+  #endStats div .k { font-size: 8.5px; letter-spacing: 0.16em; color: var(--dim); margin-top: 4px; }
+  #endShort { color: var(--warn); font-size: 11px; margin-top: 16px; letter-spacing: 0.05em; }
+  #endBtn {
+    margin-top: 26px; padding: 13px 38px; font: inherit; font-size: 12px; letter-spacing: 0.2em;
+    background: transparent; color: var(--cyan); border: 1px solid var(--cyan);
+    border-radius: 2px; cursor: pointer; transition: 0.16s;
+  }
+  #endBtn:hover { background: var(--cyan); color: #06121a; }
+
+  /* handyman job card */
+  #jobcard {
+    position: absolute; right: 16px; top: 168px; width: 232px; padding: 10px 13px;
+  }
+  #jobcard .t { font-size: 9px; letter-spacing: 0.2em; color: var(--cyan); }
+  #jobcard .ti { font-size: 12px; margin-top: 5px; letter-spacing: 0.03em; }
+  #jobcard .wh { font-size: 10px; color: var(--dim); margin-top: 3px; line-height: 1.5; }
+  #jobcard .pay { font-size: 13px; color: var(--good); margin-top: 6px; }
+  #jobbar { height: 3px; background: rgba(255,255,255,0.10); margin-top: 8px; border-radius: 2px; overflow: hidden; }
+  #jobbar > i { display: block; height: 100%; width: 0%; background: var(--cyan); }
+
+  /* toast */
+  #toast {
+    position: absolute; left: 50%; bottom: 200px; transform: translateX(-50%);
+    padding: 9px 20px; font-size: 12.5px; letter-spacing: 0.05em; max-width: 620px;
+    text-align: center; opacity: 0; transition: opacity 0.25s;
+  }
+  #toast.on { opacity: 1; }
+  #toast.good { border-color: rgba(95,209,138,0.5); color: var(--good); }
+  #toast.bad { border-color: rgba(224,85,74,0.5); color: var(--bad); }
+  #toast.warn { border-color: rgba(232,193,90,0.5); color: var(--warn); }
+
+  /* citation panel */
+  #citation {
+    position: fixed; inset: 0; z-index: 30; display: flex;
+    align-items: center; justify-content: center; background: rgba(6,9,12,0.72);
+    backdrop-filter: blur(3px); pointer-events: auto;
+  }
+  #citation .card {
+    width: min(560px, 92vw); background: var(--panel); border: 1px solid var(--edge);
+    border-radius: 4px; padding: 24px 26px;
+  }
+  #citation h3 { margin: 0 0 3px; font-size: 15px; letter-spacing: 0.16em; font-weight: 600; }
+  #citation .who { color: var(--dim); font-size: 11px; letter-spacing: 0.09em; margin-bottom: 16px; }
+  #citation ul { list-style: none; margin: 0 0 6px; padding: 0; }
+  #citation li {
+    display: flex; justify-content: space-between; gap: 14px; align-items: baseline;
+    padding: 7px 0; border-bottom: 1px solid rgba(150,178,196,0.11); font-size: 12px;
+  }
+  #citation li .c { font-size: 9px; color: var(--dim); letter-spacing: 0.08em; }
+  #citation li .amt { color: var(--good); font-variant-numeric: tabular-nums; }
+  #citation .sus { color: var(--warn); font-size: 11px; margin-top: 12px; line-height: 1.65; }
+  #citation .none { color: var(--bad); font-size: 12px; line-height: 1.7; padding: 10px 0; }
+  #citation .total {
+    display: flex; justify-content: space-between; margin-top: 12px; padding-top: 10px;
+    border-top: 1px solid var(--edge); font-size: 13px;
+  }
+  #citation .acts { display: flex; gap: 10px; margin-top: 20px; }
+  #citation button {
+    flex: 1; padding: 11px 8px; font: inherit; font-size: 11px; letter-spacing: 0.13em;
+    background: transparent; border: 1px solid var(--edge); color: var(--text);
+    border-radius: 2px; cursor: pointer; transition: 0.15s;
+  }
+  #citation button:hover { background: rgba(255,255,255,0.09); }
+  #citation button.cite { border-color: rgba(95,209,138,0.55); color: var(--good); }
+  #citation button.warnb { border-color: rgba(232,193,90,0.5); color: var(--warn); }
+  #citation .hint { margin-top: 12px; font-size: 10px; color: var(--dim); text-align: center; letter-spacing: 0.06em; }
+
+  /* map screen */
+  #mapscreen {
+    position: fixed; inset: 0; z-index: 25; background: rgba(6,9,12,0.93);
+    display: flex; flex-direction: column; pointer-events: auto;
+  }
+  #mapscreen header {
+    padding: 14px 22px; display: flex; justify-content: space-between; align-items: baseline;
+    border-bottom: 1px solid var(--edge);
+  }
+  #mapscreen h2 { margin: 0; font-size: 14px; letter-spacing: 0.24em; font-weight: 600; }
+  #mapscreen .hint { font-size: 10px; color: var(--dim); letter-spacing: 0.1em; }
+  #bigmap { flex: 1; width: 100%; display: block; }
+
+  /* log */
+  #logpanel {
+    position: absolute; left: 14px; top: 150px; width: 268px; max-height: 40vh;
+    overflow: hidden; padding: 10px 13px;
+  }
+  #logpanel .t { font-size: 9px; letter-spacing: 0.2em; color: var(--dim); margin-bottom: 7px; }
+  #logpanel .e { font-size: 10.5px; line-height: 1.55; padding: 4px 0; border-bottom: 1px solid rgba(150,178,196,0.09); }
+  #logpanel .e .p { color: var(--cyan); }
+
+  /* help */
+  #help {
+    position: fixed; inset: 0; z-index: 26; background: rgba(6,9,12,0.94);
+    display: flex; align-items: center; justify-content: center; pointer-events: auto;
+  }
+  #help .card { width: min(760px, 92vw); max-height: 88vh; overflow-y: auto; padding: 28px 32px; }
+  #help h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: 0.2em; }
+  #help .sub { color: var(--dim); font-size: 11.5px; line-height: 1.75; margin-bottom: 20px; }
+  #help .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 30px; }
+  #help h4 { margin: 0 0 8px; font-size: 10px; letter-spacing: 0.18em; color: var(--cyan); }
+  #help dl { margin: 0; font-size: 11.5px; line-height: 1.95; }
+  #help dt { display: inline-block; min-width: 74px; color: var(--text); }
+  #help dd { display: inline; margin: 0; color: var(--dim); }
+  #help dd:after { content: ''; display: block; }
+  #help .close { margin-top: 22px; text-align: center; font-size: 10px; color: var(--dim); letter-spacing: 0.12em; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- ------------------------------------------------------------ loading -->
+<div id="loading">
+  <h2>Bergen County, New Jersey</h2>
+  <h1>LEONIA</h1>
+  <div class="sub">
+    One and a half square miles between the Palisades ridge and Overpeck Creek,
+    built from real OpenStreetMap geometry and USGS elevation. Every street,
+    every building footprint, every stop sign is where it actually is.
+  </div>
+  <div id="bar"><i></i></div>
+  <div id="loadmsg">initialising</div>
+  <button id="startbtn" disabled>BEGIN SHIFT</button>
+  <div class="attrib">
+    Map data © OpenStreetMap contributors (ODbL) · Elevation USGS 3DEP · three.js (MIT)
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------------- HUD -->
+<div id="hud" class="hidden">
+  <div id="standing" class="panel">
+    <div class="row"><span class="label">STANDING</span><span class="val" id="standingVal">TOLERATED</span></div>
+    <div class="row"><span class="label">CIVIC TRUST</span><span class="label" id="trustN">50</span></div>
+    <div class="meter" id="mTrust"><i></i></div>
+    <div class="row"><span class="label">OVERREACH</span><span class="label" id="overN">0</span></div>
+    <div class="meter" id="mOver"><i></i></div>
+    <div class="row"><span class="label">PD ATTENTION</span><span class="label" id="heatN">0</span></div>
+    <div class="meter" id="mHeat"><i></i></div>
+    <div id="healthRow"><span class="label">CONDITION</span><span class="label" id="healthN">100</span></div>
+    <div class="meter" id="mHealth"><i></i></div>
+  </div>
+
+  <div id="logpanel" class="panel">
+    <div class="t">SHIFT LOG</div>
+    <div id="logbody"></div>
+  </div>
+
+  <div id="topright" class="panel">
+    <div id="clock">8:00 AM</div>
+    <div id="funds">$240</div>
+    <div id="radio">
+      <div id="radioName">WBGN 640</div>
+      <div id="radioLine"></div>
+    </div>
+  </div>
+
+  <div id="mapwrap">
+    <canvas id="minimap"></canvas>
+    <div id="street" class="panel">—</div>
+  </div>
+
+  <div id="speedo" class="panel">
+    <div id="mph">0</div>
+    <div id="mphUnit">MPH</div>
+    <div id="limitBox"><span class="t">SPEED LIMIT</span><span class="n" id="limitN">25</span></div>
+    <div id="gearRow">DRIVE · <span id="modeLabel">VEHICLE</span></div>
+  </div>
+
+  <div id="reticle"></div>
+  <div id="radarBox" class="panel">
+    <div id="radarSpeed">—</div>
+    <div id="radarMeta">NO LOCK</div>
+    <div id="radarFlags"></div>
+  </div>
+
+  <div id="targetCard" class="panel hidden">
+    <span class="plate" id="tPlate">—</span>
+    <div class="nm" id="tName"></div>
+    <div class="vio" id="tVio"></div>
+  </div>
+
+  <div id="events"></div>
+  <div id="deltas"></div>
+
+  <div id="objectives" class="panel">
+    <div class="t"><span>SHIFT</span><b id="shiftClock">12:00</b></div>
+    <div id="objList"></div>
+    <div id="objBar"><i></i></div>
+  </div>
+
+  <div id="jobcard" class="panel hidden">
+    <div class="t">JOB REQUEST</div>
+    <div class="ti" id="jobTitle"></div>
+    <div class="wh" id="jobWho"></div>
+    <div class="pay" id="jobPay"></div>
+    <div id="jobbar"><i></i></div>
+  </div>
+
+  <div id="prompt" class="panel hidden"></div>
+  <div id="toast" class="panel"></div>
+</div>
+
+<!-- ----------------------------------------------------------- citation -->
+<div id="citation" class="hidden">
+  <div class="card">
+    <h3>ROADSIDE STOP</h3>
+    <div class="who" id="cWho"></div>
+    <ul id="cList"></ul>
+    <div id="cNone" class="none hidden"></div>
+    <div id="cSus" class="sus hidden"></div>
+    <div class="total"><span>TOTAL</span><span id="cTotal">$0</span></div>
+    <div class="acts">
+      <button class="cite" id="bCite">ISSUE CITATION <small>[1]</small></button>
+      <button class="warnb" id="bWarn">VERBAL WARNING <small>[2]</small></button>
+      <button id="bLet">SEND THEM ON <small>[3]</small></button>
+    </div>
+    <div class="hint">You can only cite what you have evidence for. Everything else is a hunch.</div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------ hurt/end -->
+<div id="hurt"></div>
+
+<div id="endscreen" class="hidden">
+  <div class="card panel">
+    <h2 id="endTitle">SHIFT COMPLETE</h2>
+    <div id="endLine"></div>
+    <div id="endScore">0</div>
+    <div id="endScoreLabel">FINAL SCORE</div>
+    <div id="endStats">
+      <div><div class="v" id="esCites">0</div><div class="k">CITATIONS</div></div>
+      <div><div class="v" id="esJobs">0</div><div class="k">JOBS</div></div>
+      <div><div class="v" id="esBad">0</div><div class="k">BAD STOPS</div></div>
+      <div><div class="v" id="esTrust">0</div><div class="k">TRUST</div></div>
+    </div>
+    <div id="endShort"></div>
+    <button id="endBtn">START A NEW SHIFT</button>
+  </div>
+</div>
+
+<!-- ---------------------------------------------------------- map screen -->
+<div id="mapscreen" class="hidden">
+  <header>
+    <h2>LEONIA · BOROUGH MAP</h2>
+    <div class="hint">TAB TO CLOSE</div>
+  </header>
+  <canvas id="bigmap"></canvas>
+</div>
+
+<!-- ---------------------------------------------------------------- help -->
+<div id="help" class="hidden">
+  <div class="card panel">
+    <h2>THE JOB</h2>
+    <div class="sub">
+      Leonia posts 25 on almost every street and nobody drives it. You are not a police officer —
+      you have no badge, no authority to detain, and no immunity. What you have is a radar gun, a
+      dashcam, and the patience of a person who has watched the same intersection get run for years.<br><br>
+      The only currency that matters is <b>standing</b>. Clean, evidenced stops earn it. Pulling over
+      someone you have nothing on burns it, and a town that has decided you're a crank stops
+      cooperating entirely. You cannot enforce the speed limit at 70 mph, and the game will notice
+      if you try.
+    </div>
+    <div class="grid">
+      <div>
+        <h4>DRIVING</h4>
+        <dl>
+          <dt>W / S</dt><dd>throttle · brake &amp; reverse</dd>
+          <dt>A / D</dt><dd>steer</dd>
+          <dt>SPACE</dt><dd>handbrake</dd>
+          <dt>SHIFT</dt><dd>run, on foot</dd>
+          <dt>F</dt><dd>get out / get in</dd>
+          <dt>L</dt><dd>headlights</dd>
+          <dt>MOUSE</dt><dd>look · WHEEL zooms</dd>
+        </dl>
+      </div>
+      <div>
+        <h4>ENFORCEMENT</h4>
+        <dl>
+          <dt>R (hold)</dt><dd>radar gun — aim to lock, scan plate</dd>
+          <dt>LMB</dt><dd>capture the reading while aiming</dd>
+          <dt>H</dt><dd>signal a driver to pull over</dd>
+          <dt>E</dt><dd>approach a stopped driver on foot</dd>
+          <dt>1 / 2 / 3</dt><dd>cite · warn · release</dd>
+          <dt>Q (hold)</dt><dd>work an odd job once you're on the call</dd>
+        </dl>
+      </div>
+      <div>
+        <h4>WORLD</h4>
+        <dl>
+          <dt>TAB</dt><dd>borough map</dd>
+          <dt>N / M</dt><dd>change station · radio off</dd>
+          <dt>K</dt><dd>mute all audio</dd>
+          <dt>T</dt><dd>wait three hours (school zones, rush hour)</dd>
+          <dt>?</dt><dd>this screen</dd>
+        </dl>
+      </div>
+      <div>
+        <h4>EVIDENCE</h4>
+        <dl>
+          <dt>WATCHED</dt><dd>you saw it happen, in range and in view</dd>
+          <dt>SCANNED</dt><dd>radar recorded a number, plate pulled a record</dd>
+          <dt>HUNCH</dt><dd>not admissible — citing on it costs you</dd>
+        </dl>
+      </div>
+    </div>
+    <div class="close">PRESS ? OR ESC TO CLOSE</div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js" } }
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
