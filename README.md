@@ -5,6 +5,10 @@ An open-world game built on the real geometry of Leonia, New Jersey (Bergen Coun
 OpenStreetMap and USGS elevation data. Every street, building footprint, stop sign and
 traffic signal is where it actually is.
 
+**[▶ Play it in the browser](https://animagix77.github.io/leonia/)** — no install, no
+build step. Works in Safari, Chrome and Firefox on desktop. Give it ~30 seconds on first
+load while the world is generated; it wants a keyboard and a mouse.
+
 ## Running it
 
 ```bash
@@ -13,6 +17,9 @@ node server.js
 
 Then open <http://localhost:8099>. No build step, no dependencies — vanilla ES modules
 and a local copy of three.js.
+
+`dist/leonia.html` is the whole game as one self-contained 3.9 MB file — world data,
+three.js, shaders and all. Open it straight off disk; it needs no server at all.
 
 ## The premise
 
@@ -47,13 +54,19 @@ someone the town respects. Being useful is what earns you the standing to be a n
 | `W` `S` | throttle · brake and reverse |
 | `A` `D` | steer |
 | `SPACE` | handbrake |
+| `SHIFT` | run, on foot |
 | `F` | get out / get in |
+| `L` | headlights |
+| mouse | look · wheel zooms |
 | `R` *(hold)* | radar gun — aim to lock, scans the plate |
+| left click | capture the reading while aiming |
 | `H` | signal a driver to pull over |
-| `E` | approach a stopped driver |
+| `E` | approach a stopped driver on foot |
 | `1` `2` `3` | cite · warn · release |
+| `Q` *(hold)* | work an odd job once you're on the call |
 | `TAB` | borough map |
 | `N` `M` | change station · radio off |
+| `K` | mute all audio |
 | `T` | skip three hours |
 | `?` | help |
 
