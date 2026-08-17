@@ -611,8 +611,8 @@ function loop(now) {
         state.audio.impact(severity);
         if (severity > 12) state.audio.smash();
         // Above a walking-pace tap, a crash hurts the person in the seat.
-        if (severity > 6) {
-          state.mission.hurt((severity - 6) * 1.5, `${Math.round(severity * 2.24)} mph collision`);
+        if (severity > 8) {
+          state.mission.hurt((severity - 8) * 1.0, `${Math.round(severity * 2.24)} mph collision`);
         }
         if (hit) {
           // Metal folds inward on both cars at the shared contact point.
@@ -622,8 +622,9 @@ function loop(now) {
             hit.nx, hit.nz, hit.cx, hit.cz, severity);
         }
         if (severity > 3) {
-          enf.adjust('trust', -clamp(severity * 0.55, 0, 14), `rammed ${npc.plate}`);
-          enf.adjust('heat', clamp(severity * 2.6, 0, 40), 'collision with another vehicle');
+          enf.adjust('trust', -clamp(severity * 0.4, 0, 9), `rammed ${npc.plate}`,
+            enf.COLLISION_TRUST_FLOOR);
+          enf.adjust('heat', clamp(severity * 1.9, 0, 30), 'collision with another vehicle');
           enf.pushEvent('crash', 'COLLISION', `${npc.plate} · ${Math.round(severity * 2.24)} mph impact`, 'clean');
         }
       });
@@ -639,8 +640,8 @@ function loop(now) {
         (car, severity, hit) => {
           state.player.shake = Math.max(state.player.shake, Math.min(0.6, severity * 0.04));
           state.audio.impact(severity * 0.85);
-          if (severity > 6) {
-            state.mission.hurt((severity - 6) * 1.2, 'struck a parked vehicle');
+          if (severity > 8) {
+            state.mission.hurt((severity - 8) * 0.85, 'struck a parked vehicle');
           }
           // Parked fleet is instanced, so only the player's shell crumples.
           if (hit) {
@@ -648,8 +649,9 @@ function loop(now) {
               -hit.nx, -hit.nz, hit.cx, hit.cz, severity);
           }
           if (severity > 2.5) {
-            enf.adjust('trust', -clamp(severity * 0.5, 0, 12), 'hit a parked car');
-            enf.adjust('heat', clamp(severity * 2.2, 0, 35), 'unattended vehicle damage');
+            enf.adjust('trust', -clamp(severity * 0.32, 0, 7), 'hit a parked car',
+              enf.COLLISION_TRUST_FLOOR);
+            enf.adjust('heat', clamp(severity * 1.5, 0, 24), 'unattended vehicle damage');
             enf.pushEvent('crash', 'PARKED VEHICLE STRUCK',
               `${car.spec.name} · ${Math.round(severity * 2.24)} mph`, 'clean');
           }
@@ -657,12 +659,24 @@ function loop(now) {
       resolvePedContacts(v, state.traffic, state.world, dt, (ped, speed) => {
         const mph = Math.round(speed * 2.23694);
         state.audio.pedImpact(speed);
-        // The one thing this character cannot come back from cheaply.
-        enf.adjust('trust', -clamp(24 + speed * 2.2, 0, 70), `you hit a pedestrian at ${mph} mph`);
-        enf.adjust('overreach', clamp(18 + speed, 0, 45), 'you hit a pedestrian');
-        enf.adjust('heat', clamp(45 + speed * 2, 0, 100), 'pedestrian struck');
-        enf.say(`You hit someone at ${mph} mph. That is the whole argument, gone.`, 'bad', 6);
-        enf.addLog({ kind: 'bad', plate: '—', text: `Struck a pedestrian at ${mph} mph` });
+        /* Hitting someone is still the most expensive act in the game, but a
+           single one is a hole to climb out of, not the end of the run. Trust
+           bottoms out at the collision floor; what escalates instead is the
+           repeat multiplier, which has no floor on overreach. One accident is
+           forgiven. Working through a crosswalk is not. */
+        enf.pedStrikes++;
+        const rep = 1 + 0.6 * Math.min(enf.pedStrikes - 1, 3);
+        enf.adjust('trust', -clamp((9 + speed * 0.85) * rep, 0, 30),
+          `you hit a pedestrian at ${mph} mph`, enf.COLLISION_TRUST_FLOOR);
+        enf.adjust('overreach', clamp((6 + speed * 0.4) * rep, 0, 34), 'you hit a pedestrian');
+        enf.adjust('heat', clamp((20 + speed) * rep, 0, 70), 'pedestrian struck');
+        state.mission.hurt(3, 'you hit someone');
+        enf.say(enf.pedStrikes === 1
+          ? `You hit someone at ${mph} mph. Stop, and earn that back.`
+          : `Again — ${mph} mph. The town is counting, and so is the penalty.`,
+          'bad', 6);
+        enf.addLog({ kind: 'bad', plate: '—',
+          text: `Struck a pedestrian at ${mph} mph${enf.pedStrikes > 1 ? ` (#${enf.pedStrikes})` : ''}` });
       });
     } else {
       resolveFootVsParked(state.player, state.parking);
@@ -670,7 +684,7 @@ function loop(now) {
         enf.say(`${npc.plate} put you on the pavement.`, 'bad', 4);
         enf.adjust('heat', 6, 'you were struck in the roadway');
         // On foot there is no crumple zone; this is the fastest way to lose.
-        state.mission.hurt(14 + speed * 2.4, `struck on foot by ${npc.plate}`);
+        state.mission.hurt(10 + speed * 1.6, `struck on foot by ${npc.plate}`);
         state.player.shake = Math.min(0.9, 0.3 + speed * 0.05);
       });
     }

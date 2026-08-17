@@ -32,6 +32,11 @@ export class Enforcement {
     this.traffic = traffic;
 
     this.trust = 50;
+    /* Accidents bottom out here rather than at zero. Twelve is low enough to
+       be genuinely alarming — the meter is visibly nearly spent — and high
+       enough that the run continues and can be earned back. */
+    this.COLLISION_TRUST_FLOOR = 12;
+    this.pedStrikes = 0;
     this.overreach = 0;
     this.heat = 0;
     this.funds = 240;
@@ -74,10 +79,18 @@ export class Enforcement {
   }
 
   /** Every stat change goes through here so the player always sees the why. */
-  adjust(field, delta, reason) {
+  /* `floor` is the lower bound this particular penalty may drive the meter to.
+     It exists so that an accident cannot end the run on its own: collisions
+     pass a floor, deliberate misuse of the badge you do not have does not.
+     Losing on trust is meant to come from citing people you have nothing on —
+     that is the designed failure state — not from clipping a parked car. A
+     penalty against a meter already below its floor simply does nothing. */
+  adjust(field, delta, reason, floor = 0) {
     if (!delta) return;
     const before = this[field];
-    this[field] = clamp(this[field] + delta, 0, field === 'funds' ? 1e9 : 100);
+    this[field] = clamp(this[field] + delta, floor, field === 'funds' ? 1e9 : 100);
+    // Never let a floored penalty push the meter UP toward its floor.
+    if (delta < 0 && this[field] > before) this[field] = before;
     const real = this[field] - before;
     if (Math.abs(real) < 0.01) return;
     // Merge rapid repeats of the same reason (e.g. the speeding bleed).
@@ -399,8 +412,8 @@ export class Enforcement {
       vehicle.lastImpact = 0;
       if (impact > 5) {
         const cost = Math.round(impact * 9);
-        this.adjust('trust', -impact * 0.5, 'property damage');
-        this.adjust('heat', impact * 1.6, 'property damage');
+        this.adjust('trust', -impact * 0.38, 'property damage', this.COLLISION_TRUST_FLOOR);
+        this.adjust('heat', impact * 1.25, 'property damage');
         this.adjust('funds', -Math.min(this.funds, cost), 'repairs');
         this.say(`Property damage. -$${cost}`, 'bad', 3);
       }

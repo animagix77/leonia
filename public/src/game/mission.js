@@ -134,7 +134,7 @@ export class Mission {
   hurt(amount, cause) {
     if (this.ended || amount <= 0) return;
     this.health = clamp(this.health - amount, 0, this.maxHealth);
-    this.regenDelay = 9;
+    this.regenDelay = 6;
     this.enf.pushEvent('hurt', `INJURED −${Math.round(amount)}`, cause, 'clean');
   }
 
@@ -146,7 +146,7 @@ export class Mission {
     // Slow recovery once you stop getting hit.
     this.regenDelay = Math.max(0, this.regenDelay - dt);
     if (this.regenDelay === 0 && this.health < this.maxHealth) {
-      this.health = clamp(this.health + dt * 1.6, 0, this.maxHealth);
+      this.health = clamp(this.health + dt * 2.4, 0, this.maxHealth);
     }
 
     if (this.health <= 0) return this._end(OUTCOME.LOSS_HEALTH);
